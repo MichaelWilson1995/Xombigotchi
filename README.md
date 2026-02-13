@@ -143,7 +143,7 @@ Good wordlists: `rockyou.txt`, SecLists WiFi passwords, or generate targeted lis
 | Setting | Value |
 |---------|-------|
 | Board | ESP32-2432SO28R CYD |
-| Upload Speed | 11t200 |
+| Upload Speed | 115200 |
 | Flash Size | 4MB (32Mb) |
 | Partition Scheme | Default 4MB with spiffs |
 | Core Debug Level | None |
