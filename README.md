@@ -1,50 +1,163 @@
 # 🧟 Zombigotchi
 
-A WiFi-hunting zombie for the **ESP32 CYD** (Cheap Yellow Display). Inspired by Pwnagotchi — passive WiFi scanning, WPA handshake capture, RPG leveling, and a face that reacts to what it finds. Green terminal aesthetic. No external libraries needed beyond the ESP32 core.
+A Pwnagotchi-inspired WiFi handshake harvester running on the **ESP32 CYD (Cheap Yellow Display)**. No Python, no Raspberry Pi — just a $15 board, a button, and brains.
 
 ---
 
-## What it does
+## What It Does
 
-Zombigotchi sits on your desk (or in your bag) and passively sniffs WiFi traffic. It hops through channels 1–13 looking for networks and WPA handshakes. Every handshake captured ("brainz") earns XP and levels up the zombie. Captured handshakes are saved as `.pcap` files to an SD card — pop the card into your computer and open them in Wireshark or feed them to `hashcat`.
+Zombigotchi sniffs WiFi traffic in promiscuous mode, captures WPA/WPA2 EAPOL handshakes (the "brainz"), and saves them to SD card as `.pcap` files ready for offline cracking with `hashcat` or `aircrack-ng`. It keeps a running log of every network it sees and a full session stats file updated in real-time.
+
+Everything is gamified — your zombie levels up, earns XP, unlocks achievements, and grows more powerful the more handshakes you capture.
 
 ---
 
 ## Hardware
 
-| Part | Details |
-|------|---------|
-| Board | ESP32-2432S028R ("Cheap Yellow Display" / CYD) |
-| Display | ILI9341 320×240 TFT — built in, driven via raw SPI |
-| Touch | XPT2046 — raw SPI bit-bang, no library needed |
-| Storage | MicroSD card (FAT32, any size) — optional but recommended |
+| Part | Notes |
+|------|-------|
+| ESP32 CYD (ESP32-2432S028R) | The "Cheap Yellow Display" — ESP32 + 2.8" ILI9341 touchscreen |
+| MicroSD card | FAT32 formatted, any size |
+| USB power bank | For portable use |
 
-The CYD is available for ~$10–15. Search **"ESP32-2432S028R"** or **"ESP32 Cheap Yellow Display"** on AliExpress or Amazon.
-
----
-
-## Pin Map
-
-These are hardwired on the CYD board — no wiring needed.
-
-| Function | GPIO |
-|----------|------|
-| TFT MOSI | 13 |
-| TFT SCLK | 14 |
-| TFT MISO | 12 |
-| TFT CS   | 15 |
-| TFT DC   | 2  |
-| TFT BL   | 21 |
-| Touch CS | 33 |
-| SD CS    | 5  |
-| BOOT btn | 0  |
+The CYD has the display, touch, and SD card all wired up already. No soldering required.
 
 ---
 
-## Libraries Required
+## Features
 
-**None beyond the standard ESP32 Arduino core.** All of these ship with it:
+### Core
+- **Promiscuous WiFi sniffing** across all 13 channels with 1-second hop
+- **EAPOL handshake capture** — detects all 4-way handshake frames including QoS data frames and both LLC/SNAP and bare EAPOL formats
+- **Deauth attack** — sends bidirectional deauth frames (AP→broadcast + fake client→AP) every 2 seconds to force client reconnections and trigger fresh handshakes
+- **PCAP export** — every captured handshake saved as a valid `.pcap` file, one per session, openable in Wireshark and crackable with hashcat
 
+### SD Card Backups
+
+Everything is saved to `/zbg/` on your SD card automatically:
+
+```
+/zbg/
+  brainz/
+    s0001.pcap        ← WPA handshake captures, crack with hashcat
+    s0002.pcap        ← New file created each session
+  nets/
+    nets_0001.csv     ← Every AP seen (SSID, BSSID, channel) appended live
+    nets_0002.csv
+  stats/
+    session_0001.txt  ← Full session summary updated on every save
+    session_0002.txt
+  passwords.txt       ← Put cracked passwords here to show on screen
+```
+
+- **Handshake PCAPs** are written the moment each frame is captured
+- **Network CSV** is appended the instant a new AP is discovered
+- **Session stats** are updated on every brainz capture and network find
+- **Progress** (level, XP, achievements, cosmetics) is also saved to device NVS flash
+
+### RPG Progression
+- **15 levels** — Freshly Dead → Shambler → Groaner → Crawler → Walker → Runner → Infected → Feral → Ravager → Brain Eater → Necromancer → Undead Lord → Zombie God → APOCALYPSE → EXTINCTION
+- **XP system** — 100 XP per handshake, multiplied by active streak
+- **Streak multipliers** — 3x brainz in 60s = x1.5, 5x = x2.0, 10x = x3.0
+- **25 achievements** spanning brainz, levels, networks, streaks, uptime, and packets
+
+### Cosmetics (unlockable via achievements)
+- 6 border styles drawn around the screen edge
+- 8 face accessories — hats, halos, crowns, blood drips, scars, ghost, devil horns
+- 12 equippable badges shown below the face (wear up to 4 at once)
+- 6 title flair styles that wrap your zombie's title text
+- All saved and restored across power cycles
+
+### Themes
+9 colour themes selectable in Settings: Green (default), Red, Blue, Cyan, Yellow, Orange, Purple, White, Invert
+
+### Moods
+Your zombie's face and mood shift based on what's happening:
+- **Lurking** — idle, watching
+- **Hunting** — actively scanning
+- **Feasting!** — after a fresh brainz
+- **Shambling** — random idle state
+
+---
+
+## Menu Navigation
+
+**Hold the boot button (GPIO0) for 1.5 seconds** to open the menu.
+
+| Press | Action |
+|-------|--------|
+| Short press | Cycle to next row |
+| Long hold (0.8s+) | Open or activate the highlighted row |
+
+### Menu Map
+
+```
+PAGE 1              PAGE 2                PAGE 3 — Settings
+──────────────      ────────────────      ──────────────────
+DEAUTH              ACHIEVEMENTS          THEME
+STATS               WARDROBE              RELOAD PWS
+MORE ──────────►    SETTINGS ────────►    ◄── BACK
+EXIT (→ main)       ◄── BACK
+```
+
+EXIT on page 1 returns you to the main watch screen.
+
+---
+
+## SD Card Setup
+
+Format your SD card as **FAT32**. Zombigotchi creates all subdirectories automatically on first boot.
+
+To display cracked passwords on the main screen, create `/zbg/passwords.txt` with one password per line. They cycle every 4 seconds in the bottom bar. Use Settings → Reload PWS to reload the file without rebooting.
+
+---
+
+## Cracking Captured Handshakes
+
+Copy `.pcap` files from `/zbg/brainz/` off the SD card to your computer.
+
+**hashcat (recommended):**
+```bash
+# Convert to hc22000 format
+hcxpcapngtool -o out.hc22000 s0001.pcap
+
+# Crack against a wordlist
+hashcat -m 22000 out.hc22000 wordlist.txt
+
+# With rules
+hashcat -m 22000 out.hc22000 wordlist.txt -r rules/best64.rule
+```
+
+**aircrack-ng:**
+```bash
+aircrack-ng s0001.pcap -w wordlist.txt
+```
+
+Good wordlists: `rockyou.txt`, SecLists WiFi passwords, or generate targeted lists with `crunch` or `CUPP`.
+
+---
+
+## Arduino IDE Setup
+
+### Board Settings
+| Setting | Value |
+|---------|-------|
+| Board | ESP32 Dev Module |
+| Upload Speed | 921600 |
+| Flash Size | 4MB (32Mb) |
+| Partition Scheme | Default 4MB with spiffs |
+| Core Debug Level | None |
+
+### SD Library Fix
+If you see **"Multiple libraries found for SD.h"** or compilation errors about SD:
+
+1. Go to **Tools → Manage Libraries**
+2. Search for `SD`
+3. **Uninstall** any library named "SD" by Arduino or SparkFun
+4. Keep only the one bundled with the ESP32 board package (it won't appear in the library manager)
+
+### No External Libraries Needed
+This sketch uses only what comes built-in to the ESP32 Arduino core:
 - `SPI.h`
 - `WiFi.h`
 - `esp_wifi.h`
@@ -53,139 +166,24 @@ These are hardwired on the CYD board — no wiring needed.
 
 ---
 
-## Installation
-
-1. Install [Arduino IDE 2.x](https://www.arduino.cc/en/software)
-2. Add ESP32 board support — go to **File → Preferences** and add:
-   ```
-   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-   ```
-3. Go to **Tools → Board → Board Manager**, search `esp32`, install **esp32 by Espressif Systems**
-4. Select **Tools → Board → ESP32 Arduino → ESP32 Dev Module**
-5. Set **Tools → Partition Scheme → Huge APP (3MB No OTA)**
-6. Open `zombigotchi.ino` and upload
-
----
-
-## Screen Layout
+## Project Files
 
 ```
-┌─ ch:1  aps:3 ─────────── SD  00:01:23 ─┐
-│                    │  lv5               │
-│                    │  Brain Eater       │
-│      (O_O)         │  400/500 xp        │
-│                    │  ▓▓▓▓▓░░░          │
-│      Hunting       │  brainz:           │
-│                    │  3                 │
-│                    │  pkts: 1247        │
-│                    │  hold=menu         │
-├─────────────────────────────────────────┤
-│ > CoffeeShop_2.4GHz                     │
-└─────────────────────────────────────────┘
-```
-
-- **Top bar** — current channel, AP count, SD indicator, uptime
-- **Left panel** — animated face + current mood
-- **Right panel** — level, title, XP bar, brainz count, packet count
-- **Bottom bar** — latest network discovered
-
----
-
-## Controls
-
-| Action | Result |
-|--------|--------|
-| Hold BOOT button (1.5s) | Open menu |
-| Tap menu item (touch) | Activate item |
-| Short button press (in menu) | Move to next item |
-| Long button press / 0.8s (in menu) | Activate selected item |
-| Long press (in stats) | Return to menu |
-
----
-
-## Menu
-
-```
-┌─ zombigotchi menu ──────────────────────┐
-│                                         │
-│  DEAUTH   OFF - enable deauth attack    │
-│                                         │
-│  STATS    xp  brainz  networks  sd card │
-│                                         │
-│  EXIT     back to hunting               │
-│                                         │
-│  SD: session_0003.pcap                  │
-│      /zombigotchi/brainz/               │
-└─────────────────────────────────────────┘
+zombigotchi/
+  zombigotchi.ino     ← Full sketch, single file
+  README.md           ← This file
 ```
 
 ---
 
-## Moods
+## Legal / Ethical Notice
 
-The face changes based on what the zombie is experiencing. Each mood has 6 rotating faces that cycle every 3 seconds.
+This tool is for **educational and authorized security testing only**. Capturing network traffic or transmitting deauth frames on networks you do not own or have explicit written permission to test is illegal in most jurisdictions including the US (CFAA), UK (Computer Misuse Act), and EU member states.
 
-| Mood | Trigger | Example faces |
-|------|---------|---------------|
-| Lurking | Default / low activity | `(x_x)` `(@_@)` `[x_x]` |
-| Hunting | 10+ APs found | `(O_O)` `(>_<)` `{O_O}` |
-| Feasting | Handshake captured | `(^_^)` `(*_*)` `(X_X)` |
-| Shambling | Very low packet count | `(-_-)` `(z_z)` `(+_+)` |
+**Only use this on your own networks or in a controlled lab environment.**
 
 ---
 
-## Levels
+## Inspired By
 
-XP is earned by capturing WPA handshakes (100 XP each). Level and XP persist across reboots via the ESP32's built-in flash storage.
-
-| Level | Title |
-|-------|-------|
-| 1 | Freshly Dead |
-| 2 | Shambler |
-| 3 | Groaner |
-| 4 | Crawler |
-| 5 | Walker |
-| 6 | Runner |
-| 7 | Infected |
-| 8 | Feral |
-| 9 | Ravager |
-| 10 | Brain Eater |
-| 11 | Necromancer |
-| 12 | Undead Lord |
-| 13 | Zombie God |
-| 14 | APOCALYPSE |
-| 15 | EXTINCTION |
-
----
-
-## SD Card & PCAP Files
-
-Insert a FAT32 formatted microSD card before powering on. Zombigotchi will create this folder structure automatically:
-
-```
-/zombigotchi/
-  brainz/
-    session_0001.pcap
-    session_0002.pcap
-    ...
-```
-
-Each boot creates a new session file. Files are valid `.pcap` format and can be opened directly in **Wireshark** or processed with **hcxtools** / **hashcat**.
-
-If no SD card is inserted, handshakes are still counted and displayed but not saved to disk.
-
----
-
-## Deauth
-
-The deauth feature sends 802.11 deauthentication frames to all discovered APs, cycling through them every 600ms. This can force devices to reconnect, making handshake capture more likely.
-
-Enable it from the menu. When active, the right panel shows `deauth: N sent`.
-
-> ⚠️ **Legal Warning** — Sending deauth frames is illegal on networks you do not own or have explicit written permission to test. This feature is provided for authorized penetration testing and educational use only. The author is not responsible for misuse.
-
----
-
-## License
-
-MIT — do what you want, don't blame me.
+[Pwnagotchi](https://pwnagotchi.ai/) — the original AI-powered handshake pet. Zombigotchi is a standalone reimplementation for ESP32 with no AI, no Python, no internet dependency, and full offline operation.
